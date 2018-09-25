@@ -97,6 +97,9 @@ typedef struct _client {
     int prefixlen;          /* Size in bytes of the pending prefix commands */
 } *client;
 
+char optable[2000000][100];
+int opid, opnum;
+
 /* Prototypes */
 static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask);
 static void createMissingClients(client c);
@@ -171,7 +174,7 @@ static void randomizeClientKey(client c) {
 }
 
 static void clientDone(client c) {
-    if (config.requests_finished == config.requests) {
+	if (config.requests_finished == config.requests) {
         freeClient(c);
         aeStop(config.el);
         return;
@@ -271,8 +274,9 @@ static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 
         /* Really initialize: randomize keys and set start time. */
         if (config.randomkeys) randomizeClientKey(c);
-        c->start = ustime();
-        c->latency = -1;
+		c->obuf = sdsnew(optable[opid++]);
+		c->start = ustime();
+		c->latency = -1;
     }
 
     if (sdslen(c->obuf) > c->written) {
@@ -314,7 +318,7 @@ static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
  *
  * Even when cloning another client, prefix commands are applied if needed.*/
 static client createClient(char *cmd, size_t len, client from) {
-    int j;
+	int j;
     client c = zmalloc(sizeof(struct _client));
 
     if (config.hostsocket == NULL) {
@@ -330,7 +334,7 @@ static client createClient(char *cmd, size_t len, client from) {
             fprintf(stderr,"%s: %s\n",config.hostsocket,c->context->errstr);
         exit(1);
     }
-    /* Suppress hiredis cleanup of unused buffers for max speed. */
+	/* Suppress hiredis cleanup of unused buffers for max speed. */
     c->context->reader->maxbuf = 0;
 
     /* Build the request buffer:
@@ -349,7 +353,7 @@ static client createClient(char *cmd, size_t len, client from) {
         c->prefix_pending++;
     }
 
-    /* If a DB number different than zero is selected, prefix our request
+	/* If a DB number different than zero is selected, prefix our request
      * buffer with the SELECT command, that will be discarded the first
      * time the replies are received, so if the client is reused the
      * SELECT command will not be used again. */
@@ -374,7 +378,7 @@ static client createClient(char *cmd, size_t len, client from) {
     c->randptr = NULL;
     c->randlen = 0;
 
-    /* Find substrings in the output buffer that need to be randomized. */
+	/* Find substrings in the output buffer that need to be randomized. */
     if (config.randomkeys) {
         if (from) {
             c->randlen = from->randlen;
@@ -412,10 +416,8 @@ static client createClient(char *cmd, size_t len, client from) {
 
 static void createMissingClients(client c) {
     int n = 0;
-
     while(config.liveclients < config.numclients) {
-        createClient(NULL,0,c);
-
+		createClient(NULL,0,c);
         /* Listen backlog is quite limited on most systems */
         if (++n > 64) {
             usleep(50000);
@@ -442,14 +444,20 @@ static void showLatencyReport(void) {
         printf("  keep alive: %d\n", config.keepalive);
         printf("\n");
 
-        qsort(config.latency,config.requests,sizeof(long long),compareLatency);
-        for (i = 0; i < config.requests; i++) {
-            if (config.latency[i]/1000 != curlat || i == (config.requests-1)) {
-                curlat = config.latency[i]/1000;
-                perc = ((float)(i+1)*100)/config.requests;
-                printf("%.2f%% <= %d milliseconds\n", perc, curlat);
-            }
+        //qsort(config.latency,config.requests,sizeof(long long),compareLatency);
+        int setn = 0, getn = 0;
+		double setl = 0, getl = 0;
+		for (i = 0; i < config.requests; i++) {
+            if (optable[i][1] == '2') {
+				setl = setl * setn / (setn+1) + config.latency[i] / (double)(setn+1);
+				setn++;
+			} else {
+				getl = getl * getn / (getn+1) + config.latency[i] / (double)(getn+1);
+				getn++;
+			}
         }
+		printf("%.2f set latency(us) of %d\n\n", setl, setn);
+		printf("%.2f get latency(us) of %d\n\n", getl, getn);
         printf("%.2f requests per second\n\n", reqpersec);
     } else if (config.csv) {
         printf("\"%s\",\"%.2f\"\n", config.title, reqpersec);
@@ -465,12 +473,13 @@ static void benchmark(char *title, char *cmd, int len) {
     config.requests_issued = 0;
     config.requests_finished = 0;
 
+
     c = createClient(cmd,len,NULL);
     createMissingClients(c);
 
     config.start = mstime();
-    aeMain(config.el);
-    config.totlatency = mstime()-config.start;
+	aeMain(config.el);
+	config.totlatency = mstime()-config.start;
 
     showLatencyReport();
     freeAllClients();
@@ -680,7 +689,29 @@ int main(int argc, const char **argv) {
     config.dbnum = 0;
     config.auth = NULL;
 
-    i = parseOptions(argc,argv);
+
+
+	FILE *pf = fopen("/home/mazx/work/bigt.in", "r");
+	char buf[100], tmp[100];
+	fgets(buf, 100, pf);
+	sscanf(buf, "%d", &opnum);
+	//if (config.requests < opnum) opnum = config.requests;
+	opid = 0;
+	for (int i = 0; i < opnum; i++) {
+		char ch;
+		int t;
+		fgets(buf, 99, pf);
+		sscanf(buf+1, "%d", &t);
+		strcpy(tmp, buf);
+		for (int j = 0; j < 2 * t; j++) {
+			fgets(buf, 99, pf);
+			strcat(tmp, buf);
+
+		}
+		strcpy(optable[i], tmp);
+	}
+
+	i = parseOptions(argc,argv);
     argc -= i;
     argv += i;
 
@@ -733,7 +764,7 @@ int main(int argc, const char **argv) {
         if (test_is_selected("set")) {
             len = redisFormatCommand(&cmd,"SET key:__rand_int__ %s",data);
             benchmark("SET",cmd,len);
-            free(cmd);
+	    free(cmd);
         }
 
         if (test_is_selected("get")) {
