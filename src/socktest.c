@@ -23,8 +23,8 @@ int main(int argc, const char **argv) {
 	redisContext *context;
 
 	char buf[256], reply[256];
-	char hostip[64];
-	hostip = "127.0.0.1";
+	char hostip[64] = "127.0.0.1";
+	int hostport;
 	hostport = 6379;
 
 	context = redisConnectNonBlock(hostip, hostport);
