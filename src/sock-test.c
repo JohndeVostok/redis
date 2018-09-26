@@ -1,0 +1,78 @@
+#include "fmacros.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
+#include <sys/time.h>
+#include <signal.h>
+#include <assert.h>
+
+#include <sds.h> /* Use hiredis sds. */
+#include "ae.h"
+#include "hiredis.h"
+#include "adlist.h"
+#include "zmalloc.h"
+
+#define UNUSED(V) ((void) V)
+#define RANDPTR_INITIAL_SIZE 8
+
+char optable[2000000][100];
+int opid, opnum;
+
+/* Implementation */
+static long long ustime(void) {
+    struct timeval tv;
+    long long ust;
+
+    gettimeofday(&tv, NULL);
+    ust = ((long)tv.tv_sec)*1000000;
+    ust += tv.tv_usec;
+    return ust;
+}
+
+static long long mstime(void) {
+    struct timeval tv;
+    long long mst;
+
+    gettimeofday(&tv, NULL);
+    mst = ((long long)tv.tv_sec)*1000;
+    mst += tv.tv_usec/1000;
+    return mst;
+}
+
+int main(int argc, const char **argv) {
+	char ip[64], buf[256], reply[256];
+	int port;
+
+	redisContext *context;
+	context = redisConnectNonBlock(config.hostip,config.hostport);
+
+	buf = "*3\r\n$3\r\nSET\r\n$1\r\nA\r\n$1\r\nB\r\n";
+
+	write(context->fd, buf, strlen(buf));	
+	redisGetReply(context,&reply);
+	printf("%s\n", reply);
+/*	FILE *pf = fopen("/home/mazx/work/bigt.in", "r");
+	char buf[100], tmp[100];
+	fgets(buf, 100, pf);
+	sscanf(buf, "%d", &opnum);
+	//if (config.requests < opnum) opnum = config.requests;
+	opid = 0;
+	for (int i = 0; i < opnum; i++) {
+		char ch;
+		int t;
+		fgets(buf, 99, pf);
+		sscanf(buf+1, "%d", &t);
+		strcpy(tmp, buf);
+		for (int j = 0; j < 2 * t; j++) {
+			fgets(buf, 99, pf);
+			strcat(tmp, buf);
+
+		}
+		strcpy(optable[i], tmp);
+	}*/
+    return 0;
+}
