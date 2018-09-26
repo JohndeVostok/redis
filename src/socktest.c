@@ -16,9 +16,23 @@
 #include "adlist.h"
 #include "zmalloc.h"
 
+#ifdef ENABLE_MPI
+#include <mpi.h>
+int mpi_size,mpi_rank;
+#endif
+
 const int OPSIZE = 2000001;
 const int BUFSIZE = 4500;
 const int SERVERSIZE = 16;
+
+int comp (const void * elem1, const void * elem2)
+{
+    double f = *((double*)elem1);
+    double s = *((double*)elem2);
+    if (f > s) return  1;
+    if (f < s) return -1;
+    return 0;
+}
 
 static long long ustime(void) {
     struct timeval tv;
@@ -50,6 +64,12 @@ int getServer(char *buf, int len, int nserver) {
 }
 
 int main(int argc, const char **argv) {
+#ifdef ENABLE_MPI
+	MPI_Init(NULL,NULL);
+	MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
+	MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
+	printf("Using MPI, size: %d rank: %d\n",mpi_size,mpi_rank);
+#endif
 	redisContext* c[SERVERSIZE];
 
 	char **optab;
@@ -61,7 +81,8 @@ int main(int argc, const char **argv) {
 	long long *optime;
 	optime = malloc(OPSIZE * sizeof(long long));
 	int opid = 0, opnum = 0;
-
+	
+///////////////////////
 	FILE *pfc = fopen("config.txt", "r");
 	char hostip[64];
 	int hostport;
@@ -105,10 +126,13 @@ int main(int argc, const char **argv) {
 	}
 	for (int i = 0; i < 3; i++) printf("%d ", cnt[i]); printf("\n");
 	printf("load finished\n");
-	
 	char rep[BUFSIZE];
-	tin = mstime();
-	for (int i = 0; i < opnum; i++) {
+	int test_num=opnum/mpi_size;
+#ifdef ENABLE_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
+	tin = ustime();
+	for (int i = test_num*mpi_rank; i < test_num*(mpi_rank+1); i++) {
 		op = ustime();
 		len = send(c[ops[i]]->fd, optab[i], strlen(optab[i]), 0);
 		while (1) {
@@ -117,16 +141,53 @@ int main(int argc, const char **argv) {
 		}
 		ed = ustime();
 		oplat[opid] = ed - op;
-		optime[opid] = mstime();
+		optime[opid] = ustime();
 		opid++;
 		if (!(i % 10000)) printf("%d finished!\n", i);
 	}
-	tout = mstime();
-	int mn = 1e7, mx = 0;
-	for (int i = 0; i < opnum; i++) {
-		if (oplat[i] > mx) mx = oplat[i];
-		if (oplat[i] < mn) mn = oplat[i];
+	tout = ustime();
+	long long *all_oplat;
+	long long *all_optime;
+	if (mpi_rank==0){
+		all_oplat=malloc(test_num*mpi_size*sizeof(long long));
+		all_optime=malloc(test_num*mpi_size*sizeof(long long));
+		MPI_Gather(oplat,test_num,MPI_LONG_LONG,all_oplat,test_num,MPI_LONG_LONG,0,MPI_COMM_WORLD);
+		MPI_Gather(optime,test_num,MPI_LONG_LONG,all_optime,test_num,MPI_LONG_LONG,0,MPI_COMM_WORLD);
+	}else{
+		MPI_Gather(oplat,test_num,MPI_LONG_LONG,all_oplat,test_num,MPI_LONG_LONG,0,MPI_COMM_WORLD);
+		MPI_Gather(optime,test_num,MPI_LONG_LONG,all_optime,test_num,MPI_LONG_LONG,0,MPI_COMM_WORLD);
 	}
-	printf("%d %d %lld\n", mx, mn, tout-tin);
+	if (mpi_rank==0){
+		int frank=0;
+		long long ftime=all_optime[(frank+1)*test_num-1];
+		for(int i=1;i<mpi_size;++i){
+			if(ftime>all_optime[(i+1)*test_num-1]){
+				frank=i;
+				ftime=all_optime[(i+1)*test_num-1];
+			}
+		}
+		long long *ok_oplat=malloc(test_num*mpi_size*sizeof(long long));
+		long long fcnt=0;
+		long long fall=0;
+		for(int i=0;i<test_num*mpi_size;++i){
+			if(all_optime[i]<=ftime){
+				ok_oplat[fcnt]=all_oplat[i];
+				fall+=ok_oplat[fcnt];
+				fcnt++;
+			}
+		}
+		qsort(ok_oplat,fcnt,sizeof(long long),comp);
+		printf("MIN %lld\n", ok_oplat[0]);
+		printf("MAX %lld\n", ok_oplat[fcnt-1]);
+		printf("AVE %lf\n", (double)fall/(double)fcnt);
+		for (int i=0;i<100;i+=5){
+			printf("%d%% %lld\n",i,ok_oplat[(int)(i*0.01*fcnt)]);
+		}
+		printf("throughput: %lf\n",(double)fcnt/(double)(ftime-tin)*1000000.0);
+		
+	}
+#ifdef ENABLE_MPI
+	MPI_Finalize();
+#endif
 	return 0;
 }

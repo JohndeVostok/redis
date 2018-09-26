@@ -1,9 +1,9 @@
 3
-127.0.0.1
+10.0.0.10
 7000
-127.0.0.1
+10.0.0.10
 7001
-127.0.0.1
+10.0.0.10
 7002
-/home/rdma2018/data/5/testrun_redis.txt
+/home/zhenly/YCSB/data/5/testrun_redis.txt
 
