@@ -15,7 +15,7 @@
 release_hdr := $(shell sh -c './mkreleasehdr.sh')
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
-OPTIMIZATION?=-O2
+OPTIMIZATION?=-O3
 DEPENDENCY_TARGETS=hiredis linenoise lua
 NODEPS:=clean distclean
 
@@ -150,7 +150,7 @@ REDIS_CLI_OBJ=anet.o adlist.o dict.o redis-cli.o zmalloc.o release.o anet.o ae.o
 REDIS_BENCHMARK_NAME=redis-benchmark
 REDIS_BENCHMARK_OBJ=ae.o anet.o redis-benchmark.o adlist.o zmalloc.o redis-benchmark.o
 REDIS_SOCKTEST_NAME=socktest
-REDIS_SOCKTEST_OBJ=ae.o anet.o socktest.o adlist.o zmalloc.o socktest.o
+REDIS_SOCKTEST_OBJ=ae.o anet.o socktest.o adlist.o zmalloc.o crc16.o
 REDIS_CHECK_RDB_NAME=redis-check-rdb
 REDIS_CHECK_AOF_NAME=redis-check-aof
 
