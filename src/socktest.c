@@ -23,7 +23,11 @@ int main(int argc, const char **argv) {
 	redisContext *context;
 
 	char buf[256], reply[256];
+	char hostip[64];
+	hostip = "127.0.0.1";
+	hostport = 6379;
 
+	context = redisConnectNonBlock(hostip, hostport);
 	write(context->fd, buf, strlen(buf));
 	redisBufferRead(context);
 	redisGetReply(context, &reply);
