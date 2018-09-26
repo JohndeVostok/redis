@@ -22,17 +22,22 @@
 int main(int argc, const char **argv) {
 	redisContext *context;
 
-	char buf[256], reply[256];
+	char buf[256] = "*3\r\n$3\r\nSET\r\n$1\r\nA\r\n$1\r\nB\r\n";
+	char reply[256];
 	char hostip[64] = "127.0.0.1";
 	int hostport;
 	hostport = 6379;
 
 	context = redisConnectNonBlock(hostip, hostport);
-	write(context->fd, buf, strlen(buf));
-	redisBufferRead(context);
-	redisGetReply(context, &reply);
+	int len;
+	len = send(context->fd, buf, strlen(buf), 0);
+	printf("%d\n", len);
+	
+	while (1) {
+		len = recv(context->fd, reply, 256, 0);
+		if (len > 0) break;
+	}
 	printf("%s\n", reply);
-
 	/*
 	FILE *pf = fopen("/home/mazx/work/bigt.in", "r");
 	char buf[100], tmp[100];
