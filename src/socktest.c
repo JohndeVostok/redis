@@ -1,4 +1,5 @@
 #include "fmacros.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,8 +9,15 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <assert.h>
+
+#include <sds.h> /* Use hiredis sds. */
+#include "ae.h"
+#include "hiredis.h"
 #include "adlist.h"
 #include "zmalloc.h"
+
+#define UNUSED(V) ((void) V)
+#define RANDPTR_INITIAL_SIZE 8
 
 int main(int argc, const char **argv) {
 	redisContext *context;
